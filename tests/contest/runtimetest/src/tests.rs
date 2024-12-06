@@ -1,4 +1,5 @@
-use std::fs::{self, read_dir};
+use std::fs::{self, read_dir, File};
+use std::io::{self, BufRead};
 use std::os::linux::fs::MetadataExt;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::Path;
@@ -12,7 +13,8 @@ use nix::sys::utsname;
 use nix::unistd::{getcwd, getgid, getgroups, getuid, Gid, Uid};
 use oci_spec::runtime::IOPriorityClass::{self, IoprioClassBe, IoprioClassIdle, IoprioClassRt};
 use oci_spec::runtime::{
-    LinuxDevice, LinuxDeviceType, LinuxSchedulerPolicy, PosixRlimit, PosixRlimitType, Spec,
+    LinuxDevice, LinuxDeviceType, LinuxIdMapping, LinuxIdMappingBuilder, LinuxSchedulerPolicy,
+    PosixRlimit, PosixRlimitType, Spec,
 };
 
 use crate::utils::{self, test_read_access, test_write_access};
@@ -702,5 +704,90 @@ pub fn validate_process_oom_score_adj(spec: &Spec) {
 
     if actual_value.trim() != expected_value.to_string() {
         eprintln!("Unexpected oom_score_adj, expected: {expected_value} found: {actual_value}");
+    }
+}
+
+fn get_id_mappings(path: &str) -> Result<Vec<LinuxIdMapping>> {
+    let file = File::open(path)?;
+    let reader = io::BufReader::new(file);
+    let mut id_maps = Vec::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        let parts: Vec<&str> = line.trim().split_whitespace().collect();
+        if parts.len() == 3 {
+            // "man 7 user_namespaces" explains the format of uid_map and gid_map:
+            // <container_id> <host_id> <map_size>
+            let container_id = parts[0].parse::<u32>().unwrap();
+            let host_id = parts[1].parse::<u32>().unwrap();
+            let map_size = parts[2].parse::<u32>().unwrap();
+            id_maps.push(
+                LinuxIdMappingBuilder::default()
+                    .host_id(host_id)
+                    .container_id(container_id)
+                    .size(map_size)
+                    .build()
+                    .unwrap(),
+            );
+        } else {
+            eprintln!("invalid format in {}", path);
+        }
+    }
+
+    Ok(id_maps)
+}
+
+fn validate_id_mappings(id_mappings: Vec<LinuxIdMapping>, path: &str, property: &str) {
+    if id_mappings.is_empty() {
+        eprintln!("{} not set", property);
+    }
+
+    let actual_id_maps = get_id_mappings(path).unwrap();
+    if id_mappings.len() != actual_id_maps.len() {
+        eprintln!("{} has expected number of mappings", path);
+    }
+
+    for v in id_mappings.iter() {
+        let mut exist = false;
+        for cv in actual_id_maps.iter() {
+            if v.host_id() == cv.host_id()
+                && v.container_id() == cv.container_id()
+                && v.size() == cv.size()
+            {
+                exist = true;
+                break;
+            }
+        }
+
+        if !exist {
+            eprintln!(
+                "Unexpected {} mapping, expected: {id_mappings:?} found: {actual_id_maps:?}",
+                property
+            );
+        }
+    }
+}
+
+pub fn validate_uid_mappings(spec: &Spec) {
+    if let Some(expected_uid_mappings) = spec.uid_mappings() {
+        validate_id_mappings(
+            expected_uid_mappings.clone(),
+            "/proc/self/uid_map",
+            "uid_mappings",
+        );
+    }
+}
+
+pub fn validate_gid_mappings(spec: &Spec) {
+    if let Some(expected_gid_mappings) = spec.gid_mappings() {
+        if expected_gid_mappings.is_empty() {
+            return;
+        }
+
+        validate_id_mappings(
+            expected_gid_mappings.clone(),
+            "/proc/self/gid_map",
+            "gid_mappings",
+        );
     }
 }

@@ -30,6 +30,7 @@ use crate::tests::seccomp::get_seccomp_test;
 use crate::tests::seccomp_notify::get_seccomp_notify_test;
 use crate::tests::sysctl::get_sysctl_test;
 use crate::tests::tlb::get_tlb_test;
+use crate::tests::uid_mappings::get_uid_mappings_test;
 use crate::utils::support::{set_runtime_path, set_runtimetest_path};
 
 #[derive(Parser, Debug)]
@@ -114,6 +115,7 @@ fn main() -> Result<()> {
     let domainname = get_domainname_tests();
     let intel_rdt = get_intel_rdt_test();
     let sysctl = get_sysctl_test();
+    let uid_mappings = get_uid_mappings_test();
     let scheduler = get_scheduler_test();
     let io_priority_test = get_io_priority_test();
     let devices = get_devices_test();
@@ -142,6 +144,7 @@ fn main() -> Result<()> {
     tm.add_test_group(Box::new(domainname));
     tm.add_test_group(Box::new(intel_rdt));
     tm.add_test_group(Box::new(sysctl));
+    tm.add_test_group(Box::new(uid_mappings));
     tm.add_test_group(Box::new(scheduler));
     tm.add_test_group(Box::new(devices));
     tm.add_test_group(Box::new(process_user));
