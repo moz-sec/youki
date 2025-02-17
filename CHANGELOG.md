@@ -1,5 +1,7 @@
 # Changelog
 
+## [v0.4.2](https://github.com/moz-sec/youki/compare/v0.4.1...v0.4.2) - 2025-02-08
+
 ## [v0.5.1](https://github.com/youki-dev/youki/compare/v0.5.0...v0.5.1) - 2025-01-06
 ### 🐛 Bug Fixes
 - Fix building the wasmedge feature by @utam0k in https://github.com/youki-dev/youki/pull/3041
